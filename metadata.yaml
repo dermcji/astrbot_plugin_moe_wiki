@@ -1,0 +1,6 @@
+name: astrbot_plugin_moe_wiki
+display_name: 萌百问答
+desc: 群友问「你认不认识 XXX」「XXX 是什么」时，去萌娘百科抓条目开头，用一句话回答并附链接。查不到就不插嘴。支持限定只有某些 QQ 或某些群可用。
+version: 1.0.0
+author: dsh
+repo: https://github.com/dermcji/astrbot_plugin_moe_wiki

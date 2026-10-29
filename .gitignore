@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+data/
+.venv/
+*.log
+node_modules/
+node_modules.orig/

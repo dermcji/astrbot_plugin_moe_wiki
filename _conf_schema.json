@@ -1,0 +1,50 @@
+{
+  "moe_enabled": {
+    "type": "bool",
+    "description": "开启「萌百问答」",
+    "hint": "关掉之后 /萌百 命令也不响应。默认开着。",
+    "default": true
+  },
+  "moe_allowed_qq": {
+    "type": "list",
+    "description": "只有这些 QQ 号能触发",
+    "hint": "每行一个 QQ 号。留空 = 谁都能用；填了就只认列表里的人，其他人问也不查。",
+    "default": []
+  },
+  "moe_allowed_groups": {
+    "type": "list",
+    "description": "只有这些群能触发",
+    "hint": "每行一个群号。留空 = 所有群都行；填了就只在列表里的群生效。私聊不受这条限制。",
+    "default": []
+  },
+  "moe_auto_detect": {
+    "type": "bool",
+    "description": "自动识别问句",
+    "hint": "开着时，群里有人说「你认不认识 XXX」「XXX 是什么」就会自动去查，查不到不吭声。关掉后只能用 /萌百 手动查。",
+    "default": true
+  },
+  "moe_require_at": {
+    "type": "bool",
+    "description": "必须 @ 或叫醒它才自动查",
+    "hint": "开着更安静：只有 @ 机器人、或者用唤醒词开头时才会自动查。群里闲聊问到什么都不理。",
+    "default": false
+  },
+  "moe_use_llm": {
+    "type": "bool",
+    "description": "用模型把条目压成一句人话",
+    "hint": "开着更自然，但每次查询会多花一点 token；关掉就直接截取条目开头原文。",
+    "default": true
+  },
+  "moe_max_chars": {
+    "type": "int",
+    "description": "回答最多多少字",
+    "hint": "摘要长度上限，40~600。太长群里刷屏，150 左右比较合适。",
+    "default": 160
+  },
+  "moe_with_link": {
+    "type": "bool",
+    "description": "回答末尾附条目链接",
+    "hint": "开着会多一行萌娘百科链接，想看全文的人自己点。",
+    "default": true
+  }
+}
