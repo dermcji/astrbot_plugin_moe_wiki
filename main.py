@@ -18,7 +18,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 PLUGIN_NAME = "astrbot_plugin_moe_wiki"
-PLUGIN_VER = "1.0.0"
+PLUGIN_VER = "1.0.1"
 
 API = "https://zh.moegirl.org.cn/api.php"
 SITE = "https://zh.moegirl.org.cn/"
@@ -135,38 +135,55 @@ class MoeWiki:
 
     async def _by_title(self, title: str) -> dict | None:
         data = await self._json({
-            "action": "query",
-            "prop": "extracts",
-            "exintro": 1,
-            "explaintext": 1,
-            "redirects": 1,
-            "titles": title,
+            "action": "query", "prop": "extracts|pageprops", "exintro": 1,
+            "explaintext": 1, "redirects": 1, "titles": title,
         })
         pages = ((data or {}).get("query") or {}).get("pages") or []
-        if not pages:
+        if not pages or pages[0].get("missing"):
             return None
         page = pages[0]
-        if page.get("missing"):
-            return None
         text = (page.get("extract") or "").strip()
         if not text:
             return None
-        return {"title": page.get("title") or title, "extract": text}
+        props = page.get("pageprops") or {}
+        return {"title": page.get("title") or title, "extract": text,
+                "disambig": "disambiguation" in props}
+
+    async def _disambig(self, hit: dict, keyword: str) -> dict | None:
+        """消歧义页落到具体分支：白花 → 白花(ZONE)、白花(保健室的老师系列)…，全部交给模型挑。"""
+        data = await self._json({"action": "query", "prop": "links", "redirects": 1,
+                                 "pllimit": "max", "titles": hit["title"]})
+        pages = ((data or {}).get("query") or {}).get("pages") or []
+        names = [l.get("title") or "" for l in pages[0].get("links", [])] if pages else []
+        cands = []
+        for name in [n for n in names if n.startswith(f"{hit['title']}(")][:4]:
+            sub = await self._by_title(name)
+            if sub and not sub.get("disambig"):
+                cands.append(sub)
+        if not cands:
+            return None
+        return {**cands[0], "candidates": cands, "disambig": True, "query": keyword}
 
     async def search(self, keyword: str) -> dict | None:
-        """先按原词查；查不到就用 opensearch 找最接近的几个标题再试。"""
+        """先按原词查；消歧义页落到分支；查不到就用 opensearch 找最接近的标题再试。"""
         hit = await self._by_title(keyword)
+        if hit and hit.get("disambig"):
+            hit = await self._disambig(hit, keyword) or hit
         if hit:
+            hit["query"] = keyword
             return hit
         data = await self._json({"action": "opensearch", "search": keyword, "limit": 6})
         if not isinstance(data, list) or len(data) < 2:
             return None
-        titles = [t for t in (data[1] or []) if t and t != keyword]
-        for title in titles[:3]:
+        for title in [t for t in (data[1] or []) if t and t != keyword][:3]:
             hit = await self._by_title(title)
-            if hit:
-                hit["fuzzy"] = True
-                return hit
+            if not hit:
+                continue
+            if hit.get("disambig"):
+                hit = await self._disambig(hit, title) or hit
+            hit["fuzzy"] = True
+            hit["query"] = keyword
+            return hit
         return None
 
 
@@ -197,17 +214,11 @@ class MoeWikiPlugin(Star):
     # ---------------- 配置
 
     def _cfg(self, key: str, default=None):
-        if isinstance(self.config, dict):
-            return self.config.get(key, default)
-        try:
-            return self.config[key]
-        except Exception:  # noqa: BLE001
-            return default
+        return self.config.get(key, default)
 
     def _id_list(self, key: str) -> set[str]:
         raw = self._cfg(key, []) or []
-        if isinstance(raw, str):
-            raw = re.split(r"[,，\s]+", raw)
+        raw = re.split(r"[,，\s]+", raw) if isinstance(raw, str) else raw
         return {str(x).strip() for x in raw if str(x).strip()}
 
     def _allowed(self, event: AstrMessageEvent) -> bool:
@@ -225,10 +236,7 @@ class MoeWikiPlugin(Star):
         return True
 
     def _at_me(self, event: AstrMessageEvent) -> bool:
-        try:
-            return bool(event.is_at_or_wake_command)
-        except Exception:  # noqa: BLE001
-            return False
+        return bool(getattr(event, "is_at_or_wake_command", False))
 
     def _umo(self, event: AstrMessageEvent) -> str:
         return str(getattr(event, "unified_msg_origin", "") or "")
@@ -250,22 +258,18 @@ class MoeWikiPlugin(Star):
     # ---------------- 查询与渲染
 
     async def _lookup(self, keyword: str) -> dict | None:
-        now = time.monotonic()
-        ttl = 1800.0
-        cached = self._cache.get(keyword)
-        if cached and now - cached[0] < ttl:
+        now, cached = time.monotonic(), self._cache.get(keyword)
+        if cached and now - cached[0] < 1800.0:
             return cached[1]
         hit = await self._wiki.search(keyword)
         if hit:
-            if len(self._cache) > 200:
-                self._cache.clear()
+            self._cache = {} if len(self._cache) > 200 else self._cache
             self._cache[keyword] = (now, hit)
         return hit
 
     def _cooling(self, key: str) -> bool:
         now = time.monotonic()
-        last = self._recent.get(key, 0.0)
-        if now - last < 20:
+        if now - self._recent.get(key, 0.0) < 20:
             return True
         self._recent[key] = now
         if len(self._recent) > 300:
@@ -274,9 +278,14 @@ class MoeWikiPlugin(Star):
 
     async def _summary(self, umo: str, hit: dict) -> str:
         extract = re.sub(r"\s+", " ", hit["extract"]).strip()
+        rows = []
+        for i, c in enumerate(hit.get("candidates") or [], 1):
+            flat = re.sub(r"\s+", " ", c["extract"]).strip()[:180]
+            rows.append(f"{i}. {c['title']}：{flat}")
+        listing = "\n".join(rows)
         limit = self.max_chars
         if not self.use_llm:
-            return extract[:limit]
+            return (listing or extract)[:limit]
         try:
             provider = self.context.get_using_provider(umo=umo)
         except Exception:  # noqa: BLE001
@@ -285,9 +294,14 @@ class MoeWikiPlugin(Star):
             return extract[:limit]
         persona = await self._persona_prompt(umo)
         system = persona or "你是个懂二次元的群友，说话自然、简短、不端着。"
+        ask = hit.get("query") or hit["title"]
+        hint = ("「" + ask + "」在萌百是消歧义页，上面列了几个同名条目。"
+                "挑最符合问句的那个来说（问「是谁」「哪个角色」就找角色类）；"
+                "要是问句里没线索，就直说这个词可以指这几样。\n") if listing else ""
         prompt = (
-            f"有人问你「{hit['title']}」是什么。下面是萌娘百科条目开头的原文：\n\n"
-            f"{extract[:1200]}\n\n"
+            f"有人问你「{ask}」是什么。下面是萌娘百科的资料：\n\n"
+            f"{listing or extract[:1200]}\n\n"
+            f"{hint}"
             f"用你平时的口吻回答他：一两句话，不超过 {limit} 字。"
             "保持你自己的性格、语气和说话习惯，就像平时在群里聊天那样，"
             "别切换成百科腔、别写得像念稿、别端起来。"
@@ -314,10 +328,9 @@ class MoeWikiPlugin(Star):
         body = await self._summary(self._umo(event), hit)
         if not body:
             return ""
-        lines = [f"【{hit['title']}】{body}"]
-        if self.with_link:
-            lines.append(f"{SITE}{quote(hit['title'])}")
-        return "\n".join(lines)
+        title = hit.get("query") or hit["title"]
+        head = f"【{title}】{body}"
+        return f"{head}\n{SITE}{quote(title)}" if self.with_link else head
 
     # ---------------- 事件
 

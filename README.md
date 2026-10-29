@@ -6,7 +6,7 @@
 
 ## 安装
 
-**方式一（推荐）**：到 [Releases](https://github.com/dermcji/astrbot_plugin_moe_wiki/releases/latest) 下载 `astrbot_plugin_moe_wiki-v1.0.0.zip`，解压后把 `astrbot_plugin_moe_wiki` 文件夹放进 AstrBot 的 `data/plugins/`，重启或在插件管理页点重载。
+**方式一（推荐）**：到 [Releases](https://github.com/dermcji/astrbot_plugin_moe_wiki/releases/latest) 下载 `astrbot_plugin_moe_wiki-v1.0.1.zip`，解压后把 `astrbot_plugin_moe_wiki` 文件夹放进 AstrBot 的 `data/plugins/`，重启或在插件管理页点重载。
 
 **方式二**：在 AstrBot 插件市场的仓库地址里填 `https://github.com/dermcji/astrbot_plugin_moe_wiki`。
 
@@ -58,13 +58,15 @@ bot：【原神】《原神》是米哈游研发的一款开放世界冒险游�
 1. 正则从消息里抠出词条名，过滤掉代词和疑问残渣；
 2. 打 [`zh.moegirl.org.cn`](https://zh.moegirl.org.cn) 的 MediaWiki API：`action=query&prop=extracts&exintro` 取条目开头；
 3. 原词查不到时用 `action=opensearch` 找最接近的标题再试；
-4. 有可用模型就按**当前会话人设**压成一两句话，没有就直接截取原文；
-5. 结果缓存 30 分钟，同一会话 20 秒内不重复答同一个词。
+4. 命中消歧义页（`pageprops.disambiguation`）时，把该页的分支条目（如 `白花` → `白花(保健室的老师系列)`、`白花(铃木木乃美)`）连同各自引言一起交给模型挑；
+5. 有可用模型就按**当前会话人设**压成一两句话，没有就直接截取原文；
+6. 结果缓存 30 分钟，同一会话 20 秒内不重复答同一个词。
 
 请求带 UA、有间隔限流，不给萌百服务器添乱。
 
 ## 版本记录
 
+- **1.0.1**：消歧义页处理。以前问「白花」这种同名词，只会拿到「字面上是白色的花，另外还能指」这句没下文的话；现在会解析成具体分支条目（角色 / 歌曲等）再回答。
 - **1.0.0**：首个版本。问句自动识别、萌百查询与近似标题兜底、按人设总结、`/萌百` 手动查、QQ/群白名单、缓存与限流。
 
 ## 许可
