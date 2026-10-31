@@ -5,3 +5,25 @@ data/
 *.log
 node_modules/
 node_modules.orig/
+
+# 个人信息 / 凭据：运行时才会出现，但绝不该进仓库
+# data/ 里保存的是使用者的私有数据（查询记录、本地配置）
+cookie*.json
+cookies.txt
+*sessdata*
+.env
+.env.*
+
+# 本地数据库 / 缓存
+*.db
+*.sqlite
+*.sqlite3
+
+# 打包产物：zip 里可能夹带 data/
+*.zip
+*.tar.gz
+*.apk
+
+# 扫码登录图：等同于账号登录态
+*qr*.png
+qrcode*.png
